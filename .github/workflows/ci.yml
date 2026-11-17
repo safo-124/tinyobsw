@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: cmake -S obsw -B build-fuzz -DCMAKE_C_COMPILER=clang -DOBSW_FUZZ=ON -DOBSW_TESTS=OFF
       - run: cmake --build build-fuzz --target fuzz_packet
-      - run: ./build-fuzz/fuzz_packet -max_total_time=60
+      - run: ./build-fuzz/fuzz_packet -max_total_time=60 obsw/fuzz/corpus
 
   obsw-cortex-m33:
     runs-on: ubuntu-latest

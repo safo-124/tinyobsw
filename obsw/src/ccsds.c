@@ -1,16 +1,6 @@
 #include "tinyobsw/ccsds.h"
 
-/* Big-endian helpers. Kept static so they vanish into the callers. */
-static void put_be16(uint8_t *p, uint16_t v)
-{
-    p[0] = (uint8_t)(v >> 8);
-    p[1] = (uint8_t)(v & 0xFFu);
-}
-
-static uint16_t get_be16(const uint8_t *p)
-{
-    return (uint16_t)(((unsigned)p[0] << 8) | (unsigned)p[1]);
-}
+#include "bytes.h"
 
 obsw_status_t ccsds_encode_primary(const ccsds_primary_hdr_t *hdr,
                                    uint8_t *buf, size_t buf_len)
