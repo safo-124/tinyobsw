@@ -107,6 +107,16 @@ def _data_fields(raw: bytes, is_tc: bool, start: int, end: int) -> List[Field]:
             pos += size
         return out
 
+    if not is_tc and (service, subtype) == (9, 2) and n == 7:
+        coarse, fine = struct.unpack(">IH", d[1:7])
+        return [
+            _field("Rate exponent", "data", start, start + 1, f"{d[0]} (every {1 << d[0]} s)"),
+            _field("On-board time sample", "data", start + 1, end, f"{coarse + fine / 65536:.4f} s"),
+        ]
+
+    if is_tc and (service, subtype) == (9, 1) and n == 1:
+        return [_field("Rate exponent", "data", start, end, f"{d[0]} (every {1 << d[0]} s)")]
+
     if not is_tc and service == 5 and n >= 2:
         ev = _u16(d, 0)
         out = [_field("Event ID", "data", start, start + 2,

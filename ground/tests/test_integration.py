@@ -29,11 +29,16 @@ def is_periodic_hk(tm: Telemetry) -> bool:
     return (tm.service, tm.subtype) == (3, 25) and tm.dest_id == 0
 
 
+def is_periodic(tm: Telemetry) -> bool:
+    """Housekeeping and time reports arrive every second on their own."""
+    return is_periodic_hk(tm) or (tm.service, tm.subtype) == (9, 2)
+
+
 def exchange(link: UdpLink, tc: Telecommand) -> list:
     """Send a TC and return the replies, ignoring periodic housekeeping
     (it arrives every second and could land in the middle of a reply)."""
     link.send(tc.encode())
-    return [t for t in (Telemetry.decode(p) for p in link.collect()) if not is_periodic_hk(t)]
+    return [t for t in (Telemetry.decode(p) for p in link.collect()) if not is_periodic(t)]
 
 
 def types(tms: list) -> list:
@@ -67,7 +72,7 @@ def test_corrupted_crc_rejected(link):
     raw = bytearray(Telecommand(APID, 9, 17, 1, ACK_ALL, GROUND_ID).encode())
     raw[-1] ^= 0xFF
     link.send(bytes(raw))
-    tms = [t for t in (Telemetry.decode(p) for p in link.collect()) if not is_periodic_hk(t)]
+    tms = [t for t in (Telemetry.decode(p) for p in link.collect()) if not is_periodic(t)]
     assert len(tms) == 1
     assert decode_verification(tms[0]).failure_code == ObswStatus.CRC
 
@@ -134,3 +139,28 @@ def test_heater_fault_puts_instrument_in_safe_mode(link):
     # repair, recover to STANDBY: accepted and completed
     assert types(exchange(link, commands.sim_clear_fault(APID, 53, GROUND_ID))) == [(1, 1), (1, 3), (1, 7)]
     assert types(exchange(link, commands.set_mode(APID, 54, Mode.STANDBY, GROUND_ID))) == [(1, 1), (1, 3), (1, 7)]
+
+
+def test_time_correlation_estimates_the_simulated_drift(link):
+    """The simulator's clock runs 250 + 10 x (T - 25) ppm fast: 200 ppm at 20 degC (OFF)."""
+    import time as _time
+    from tinyground.timecorr import TimeCorrelator
+
+    corr = TimeCorrelator()
+    temp = None
+    deadline = _time.monotonic() + 25.0
+    while _time.monotonic() < deadline:
+        raw = link.recv(1.0)
+        received = _time.time()
+        if raw is None:
+            continue
+        tm = Telemetry.decode(raw)
+        if is_periodic_hk(tm):
+            temp = InstrumentHk.decode(tm).temperature_c
+        elif (tm.service, tm.subtype) == (9, 2):
+            obt = int.from_bytes(tm.data[1:5], "big") + int.from_bytes(tm.data[5:7], "big") / 65536
+            corr.add(obt, received, temp)
+    est = corr.estimate()
+    assert est.samples >= 20
+    # Generous bound: timing on shared CI machines is noisy. Still far from 0 ppm.
+    assert est.drift_ppm == pytest.approx(200, abs=max(60, 4 * est.drift_sigma_ppm))

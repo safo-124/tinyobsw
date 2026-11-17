@@ -75,6 +75,8 @@ void setUp(void)
     cfg.time_now = fake_clock;
     cfg.time_ctx = NULL;
     TEST_ASSERT_EQUAL(OBSW_OK, obsw_init(&obsw, &cfg));
+    obsw.time_rate_exp  = 6; /* time reports only every 64 s */
+    obsw.time_countdown = 64;
     obsw_tick(&obsw);
     TEST_ASSERT_EQUAL(OBSW_OK, send_tc(3, 6, hk_off, sizeof hk_off)); /* quiet: no periodic HK */
 }

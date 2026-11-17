@@ -93,3 +93,8 @@ def monitoring_limits(apid: int, seq: int, warning_c: float, danger_c: float,
     """TC[12,7] change the temperature warning and danger limits."""
     data = struct.pack(">BHhh", 1, PMON_TEMPERATURE, round(warning_c * 100), round(danger_c * 100))
     return Telecommand(apid, seq, 12, 7, ack, source, data)
+
+
+def time_report_rate(apid: int, seq: int, exponent: int, source: int = 0, ack: int = ACK_ALL) -> Telecommand:
+    """TC[9,1] send a time report every 2**exponent seconds (0..6)."""
+    return Telecommand(apid, seq, 9, 1, ack, source, bytes([exponent]))

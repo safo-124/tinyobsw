@@ -39,6 +39,9 @@
 #define OBSW_MAX_CATCHUP    10u  /* most 1-second steps run by one obsw_tick() */
 #define OBSW_HK_DEFAULT_S   1u   /* default housekeeping period, seconds */
 
+#define OBSW_TIME_RATE_DEFAULT 0u  /* ST[9] time report every 2^0 = 1 s */
+#define OBSW_TIME_RATE_MAX     6u  /* ... up to every 2^6 = 64 s */
+
 /* ST[12] temperature monitoring defaults */
 #define OBSW_PMON_TEMP_ID      1u    /* the one monitoring definition */
 #define OBSW_PMON_WARN_CDEG    4000  /* 40.00 degC: warning */
@@ -81,6 +84,10 @@ typedef struct {
     uint16_t      hk_interval_s;
     uint16_t      hk_countdown;
 
+    /* ST[9] time reports */
+    uint8_t       time_rate_exp;   /* report every 2^exp seconds */
+    uint16_t      time_countdown;
+
     /* ST[12] temperature monitoring */
     uint8_t       pmon_enabled;
     uint8_t       pmon_status;     /* confirmed pmon_status_t */
@@ -107,7 +114,7 @@ obsw_status_t obsw_handle_tc(obsw_t *obsw, const uint8_t *buf, size_t len);
  * Run periodic work. Call it often (e.g. every 100 ms); it reads
  * time_now and runs one step per elapsed whole second: instrument
  * physics, then limit monitoring (which may put the instrument in
- * SAFE), then periodic housekeeping. After a long stall it runs at
+ * SAFE), then periodic housekeeping, then the periodic time report. After a long stall it runs at
  * most OBSW_MAX_CATCHUP steps and skips the rest; if the clock jumps
  * backwards it simply resynchronises. Does nothing without time_now.
  */

@@ -105,3 +105,13 @@ def test_bad_crc_is_flagged():
     raw = bytearray(KNOWN_TC)
     raw[-1] ^= 0xFF
     assert segments(bytes(raw))[-1]["value"].endswith("INVALID")
+
+
+def test_time_report_layouts():
+    tm = Telemetry(100, 0, 9, 2, data=bytes([0, 0, 0, 0, 42, 0x80, 0])).encode()
+    tc = commands.time_report_rate(100, 0, 2).encode()
+    assert_tiles(tm, segments(tm))
+    tm_values = {f["name"]: f["value"] for f in segments(tm)}
+    assert tm_values["Rate exponent"] == "0 (every 1 s)"
+    assert tm_values["On-board time sample"] == "42.5000 s"
+    assert {f["name"]: f["value"] for f in segments(tc)}["Rate exponent"] == "2 (every 4 s)"

@@ -6,10 +6,19 @@
  *   ground station  <--TM-------------------------------  obsw_sim
  *
  * Telemetry goes back to whichever address sent the most recent TC.
- * On-board time is seconds since the simulator started, like a real
- * on-board clock that starts counting at boot.
  *
- * Usage: obsw_sim [-p port] [-a apid] [-q quiet] [-v log housekeeping too]
+ * The on-board clock is a simulated free-running oscillator. It starts
+ * at 0 at boot and runs fast by
+ *
+ *     rate error (ppm) = base + tempco x (detector temperature - 25 degC)
+ *
+ * like a real uncompensated crystal, whose frequency depends on its
+ * temperature. Defaults: base 250 ppm, tempco 10 ppm/degC, so a heater
+ * fault also makes the clock drift faster. The ground estimates this
+ * drift from ST[9] time reports (ground/tinyground/timecorr.py).
+ *
+ * Usage: obsw_sim [-p port] [-a apid] [-d base_ppm] [-k tempco_ppm_per_degC]
+ *                 [-q quiet] [-v log housekeeping too]
  */
 #define _POSIX_C_SOURCE 200809L
 
@@ -28,8 +37,10 @@
 
 #include "tinyobsw/obsw.h"
 
-#define DEFAULT_PORT 10025
-#define DEFAULT_APID 100
+#define DEFAULT_PORT       10025
+#define DEFAULT_APID       100
+#define DEFAULT_BASE_PPM   250.0
+#define DEFAULT_TEMPCO_PPM 10.0
 #define MAX_PACKET   (CCSDS_PRIMARY_HDR_LEN + 0x10000u)
 
 typedef struct {
@@ -40,8 +51,16 @@ typedef struct {
     int                verbose; /* also log every housekeeping packet */
 } sim_link_t;
 
+/* The simulated oscillator behind the on-board clock. */
+typedef struct {
+    struct timespec last;       /* real time of the previous reading */
+    double          obt;        /* on-board time, seconds since boot */
+    double          base_ppm;
+    double          tempco_ppm; /* per degC away from 25 degC */
+    const obsw_t   *core;       /* to read the detector temperature */
+} sim_clock_t;
+
 static volatile sig_atomic_t g_running = 1;
-static struct timespec       g_boot;
 
 static void on_signal(int sig)
 {
@@ -75,24 +94,30 @@ static const char *status_name(obsw_status_t st)
     return "UNKNOWN";
 }
 
-/* obsw_time_fn: elapsed time since start as CCSDS Unsegmented Code. */
+static double clock_rate_ppm(const sim_clock_t *clk)
+{
+    double temp_c = clk->core->instr.temp_cdeg / 100.0;
+    return clk->base_ppm + clk->tempco_ppm * (temp_c - 25.0);
+}
+
+/* obsw_time_fn: advance the oscillator to now and read it as CUC. */
 static pus_cuc_time_t onboard_time(void *ctx)
 {
+    sim_clock_t *clk = (sim_clock_t *)ctx;
     struct timespec now;
     pus_cuc_time_t t;
-    time_t sec;
-    long nsec;
+    double elapsed;
+    double whole;
 
-    (void)ctx;
     clock_gettime(CLOCK_MONOTONIC, &now);
-    sec  = now.tv_sec - g_boot.tv_sec;
-    nsec = now.tv_nsec - g_boot.tv_nsec;
-    if (nsec < 0) {
-        sec -= 1;
-        nsec += 1000000000L;
-    }
-    t.coarse = (uint32_t)sec;
-    t.fine   = (uint16_t)(((uint64_t)nsec << 16) / 1000000000u);
+    elapsed = (double)(now.tv_sec - clk->last.tv_sec) +
+              (double)(now.tv_nsec - clk->last.tv_nsec) / 1e9;
+    clk->last = now;
+    clk->obt += elapsed * (1.0 + clock_rate_ppm(clk) * 1e-6);
+
+    whole    = (double)(uint32_t)clk->obt;
+    t.coarse = (uint32_t)clk->obt;
+    t.fine   = (uint16_t)((clk->obt - whole) * 65536.0);
     return t;
 }
 
@@ -111,11 +136,25 @@ static void udp_tm_sink(void *ctx, const uint8_t *pkt, size_t len)
         return;
     }
     if (!link->quiet && pus_tm_parse(pkt, len, &tm) == OBSW_OK &&
-        !(tm.sec.service == 3 && tm.sec.subtype == 25 && link->verbose == 0)) {
+        (link->verbose || !((tm.sec.service == 3 && tm.sec.subtype == 25) ||
+                            (tm.sec.service == 9 && tm.sec.subtype == 2)))) {
         fprintf(stderr, "  TM[%u,%u] %zu bytes, seq %u\n",
                 (unsigned)tm.sec.service, (unsigned)tm.sec.subtype, len,
                 (unsigned)tm.primary.seq_count);
     }
+}
+
+static int parse_double(const char *s, double lo, double hi, double *out)
+{
+    char *end = NULL;
+    double v;
+    errno = 0;
+    v = strtod(s, &end);
+    if (errno != 0 || end == s || *end != '\0' || v < lo || v > hi) {
+        return -1;
+    }
+    *out = v;
+    return 0;
 }
 
 static int parse_uint(const char *s, unsigned long max, unsigned long *out)
@@ -139,12 +178,17 @@ int main(int argc, char **argv)
     static obsw_t core;
     obsw_config_t cfg;
     sim_link_t link;
+    sim_clock_t clk;
     struct sockaddr_in addr;
     struct sigaction sa;
     int opt;
 
     memset(&link, 0, sizeof link);
-    while ((opt = getopt(argc, argv, "p:a:qvh")) != -1) {
+    memset(&clk, 0, sizeof clk);
+    clk.base_ppm   = DEFAULT_BASE_PPM;
+    clk.tempco_ppm = DEFAULT_TEMPCO_PPM;
+    clk.core       = &core;
+    while ((opt = getopt(argc, argv, "p:a:d:k:qvh")) != -1) {
         switch (opt) {
         case 'p':
             if (parse_uint(optarg, 65535, &port) != 0 || port == 0) {
@@ -158,6 +202,18 @@ int main(int argc, char **argv)
                 return 2;
             }
             break;
+        case 'd':
+            if (parse_double(optarg, -10000.0, 10000.0, &clk.base_ppm) != 0) {
+                fprintf(stderr, "bad base drift: %s (ppm, -10000..10000)\n", optarg);
+                return 2;
+            }
+            break;
+        case 'k':
+            if (parse_double(optarg, -1000.0, 1000.0, &clk.tempco_ppm) != 0) {
+                fprintf(stderr, "bad temperature coefficient: %s (ppm/degC)\n", optarg);
+                return 2;
+            }
+            break;
         case 'q':
             link.quiet = 1;
             break;
@@ -165,18 +221,18 @@ int main(int argc, char **argv)
             link.verbose = 1;
             break;
         default:
-            fprintf(stderr, "usage: %s [-p port] [-a apid] [-q] [-v]\n", argv[0]);
+            fprintf(stderr, "usage: %s [-p port] [-a apid] [-d base_ppm] [-k tempco] [-q] [-v]\n", argv[0]);
             return opt == 'h' ? 0 : 2;
         }
     }
 
-    clock_gettime(CLOCK_MONOTONIC, &g_boot);
+    clock_gettime(CLOCK_MONOTONIC, &clk.last);
 
     cfg.apid     = (uint16_t)apid;
     cfg.tm_sink  = udp_tm_sink;
     cfg.tm_ctx   = &link;
     cfg.time_now = onboard_time;
-    cfg.time_ctx = NULL;
+    cfg.time_ctx = &clk;
     if (obsw_init(&core, &cfg) != OBSW_OK) {
         fprintf(stderr, "obsw_init failed\n");
         return 1;
@@ -205,6 +261,8 @@ int main(int argc, char **argv)
     sigaction(SIGTERM, &sa, NULL);
 
     fprintf(stderr, "obsw_sim: APID %lu, listening for TCs on 127.0.0.1:%lu\n", apid, port);
+    fprintf(stderr, "obsw_sim: on-board clock runs %+.0f ppm %+.1f ppm/degC away from 25 degC\n",
+            clk.base_ppm, clk.tempco_ppm);
 
     while (g_running) {
         struct pollfd pfd;

@@ -1,8 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
-import type { GroundEvent, Hk, LinkState, Status } from './types'
+import type { Clock, GroundEvent, Hk, LinkState, Status } from './types'
 
 const MAX_EVENTS = 600
 const MAX_HK_POINTS = 180 // 3 minutes at 1 Hz
+const MAX_CLOCK_POINTS = 300
+
+/** One time report as plotted: estimate with its 2-sigma band, model truth, residual. */
+export interface ClockPoint {
+  obt: number
+  drift: number | null
+  band: [number, number] | null
+  model: number | null
+  residual_ms: number
+  accepted: boolean
+}
 const SILENT_AFTER_MS = 3000
 
 type ServerMessage =
@@ -12,8 +23,24 @@ type ServerMessage =
 export interface GroundLink {
   events: GroundEvent[]
   hk: Hk[]
+  clock: Clock | null
+  clockPoints: ClockPoint[]
   link: LinkState
   apid: number | null
+}
+
+function clockPoint(e: GroundEvent): ClockPoint | null {
+  if (e.kind !== 'tm' || !e.timecorr) return null
+  const t = e.timecorr
+  const c = t.clock
+  return {
+    obt: t.obt,
+    drift: c ? c.drift_ppm : null,
+    band: c ? [c.drift_ppm - 2 * c.drift_sigma_ppm, c.drift_ppm + 2 * c.drift_sigma_ppm] : null,
+    model: c ? c.model_drift_ppm : null,
+    residual_ms: t.residual_ms,
+    accepted: t.accepted,
+  }
 }
 
 function hkFrom(events: GroundEvent[]): Hk[] {
@@ -28,6 +55,8 @@ export function useGroundLink(): GroundLink {
   const [hk, setHk] = useState<Hk[]>([])
   const [link, setLink] = useState<LinkState>('connecting')
   const [apid, setApid] = useState<number | null>(null)
+  const [clock, setClock] = useState<Clock | null>(null)
+  const [clockPoints, setClockPoints] = useState<ClockPoint[]>([])
   const lastTmAt = useRef<number>(0)
 
   useEffect(() => {
@@ -50,6 +79,10 @@ export function useGroundLink(): GroundLink {
           setHk(hkFrom(data.events))
           setApid(data.status.apid)
           setLink(data.status.link)
+          setClock(data.status.clock)
+          setClockPoints(
+            data.events.map(clockPoint).filter((p): p is ClockPoint => p !== null).slice(-MAX_CLOCK_POINTS),
+          )
           if (data.status.link === 'live') lastTmAt.current = Date.now()
           return
         }
@@ -64,6 +97,11 @@ export function useGroundLink(): GroundLink {
           setLink('live')
           const point = e.hk
           if (point) setHk((prev) => [...prev.slice(-(MAX_HK_POINTS - 1)), point])
+          const cp = clockPoint(e)
+          if (cp) {
+            setClockPoints((prev) => [...prev.slice(-(MAX_CLOCK_POINTS - 1)), cp])
+            if (e.timecorr?.clock) setClock(e.timecorr.clock)
+          }
         }
       }
       socket.onclose = () => {
@@ -91,5 +129,5 @@ export function useGroundLink(): GroundLink {
     }
   }, [])
 
-  return { events, hk, link, apid }
+  return { events, hk, link, apid, clock, clockPoints }
 }

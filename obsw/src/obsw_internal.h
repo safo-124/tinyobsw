@@ -72,6 +72,13 @@ obsw_status_t st08_perform(obsw_t *obsw, const pus_tc_t *tc);
 void st05_report(obsw_t *obsw, uint8_t severity, uint16_t event_id,
                  const uint8_t *aux, size_t aux_len);
 
+/* ST[9] time management (src/services/st09.c). */
+#define ST09_TIME_REPORT_LEN 7u /* rate exponent u8 + CUC time 6 bytes */
+void          st09_init(obsw_t *obsw);
+void          st09_periodic(obsw_t *obsw);
+obsw_status_t st09_check_rate(const obsw_t *obsw, const pus_tc_t *tc);
+obsw_status_t st09_set_rate(obsw_t *obsw, const pus_tc_t *tc);
+
 /* ST[12] on-board monitoring (src/services/st12.c). */
 #define ST12_TRANSITION_LEN 10u
 void          st12_init(obsw_t *obsw);

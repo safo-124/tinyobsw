@@ -123,3 +123,22 @@ def test_set_limits_validation():
                                             "danger_c": 999}).status_code == 422
         ok = client.post("/api/tc", json={"command": "set_limits", "warning_c": 30, "danger_c": 35})
         assert ok.status_code == 200 and ok.json()["label"] == "Limits 30 / 35 °C"
+
+
+@needs_sim
+def test_clock_estimate_and_level1(sim_port):
+    with TestClient(create_app(port=sim_port, apid=APID, serve_console=False)) as client:
+        wait_for(client, lambda ev: (client.get("/api/status").json()["clock"] or {})
+                 .get("samples", 0) >= 8, timeout=15.0)
+        clock = client.get("/api/status").json()["clock"]
+        assert clock["model_drift_ppm"] == pytest.approx(200, abs=1)   # OFF: 20 degC
+        assert clock["obt_zero_utc"].endswith("Z")
+        events = client.get("/api/events").json()
+        assert any("timecorr" in e for e in events)
+        stamped = [e["hk"] for e in events if "hk" in e and "utc" in e["hk"]]
+        assert stamped and stamped[-1]["utc_sigma_ms"] > 0
+        l1 = client.get("/api/l1").json()
+        assert l1 and l1[-1]["mode"] == "OFF"
+        csv_resp = client.get("/api/l1.csv")
+        assert csv_resp.headers["content-type"].startswith("text/csv")
+        assert csv_resp.text.startswith("utc,utc_sigma_ms,obt_s")

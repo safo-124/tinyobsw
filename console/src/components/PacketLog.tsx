@@ -7,7 +7,9 @@ interface Props {
   onSelect: (id: number) => void
 }
 
-const isPeriodicHk = (e: GroundEvent) => e.kind === 'tm' && e.service === 3 && e.subtype === 25 && e.dest === 0
+const isPeriodic = (e: GroundEvent) =>
+  e.kind === 'tm' &&
+  ((e.service === 3 && e.subtype === 25 && e.dest === 0) || (e.service === 9 && e.subtype === 2))
 
 function when(e: GroundEvent): string {
   if (e.kind === 'tm' && e.obt !== undefined) return `${e.obt.toFixed(1)} s`
@@ -32,7 +34,7 @@ export function PacketLog({ events, selectedId, onSelect }: Props) {
   const [showAuto, setShowAuto] = useState(false)
 
   const visible = events
-    .filter((e) => (showHk || !isPeriodicHk(e)) && (showAuto || e.kind !== 'tc' || !e.auto))
+    .filter((e) => (showHk || !isPeriodic(e)) && (showAuto || e.kind !== 'tc' || !e.auto))
     .slice(-200)
     .reverse()
 
@@ -43,7 +45,7 @@ export function PacketLog({ events, selectedId, onSelect }: Props) {
         <div className="log-filters">
           <label className="check">
             <input type="checkbox" checked={showHk} onChange={(e) => setShowHk(e.target.checked)} />
-            Periodic housekeeping
+            Periodic reports
           </label>
           <label className="check">
             <input type="checkbox" checked={showAuto} onChange={(e) => setShowAuto(e.target.checked)} />

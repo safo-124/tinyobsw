@@ -916,3 +916,56 @@ input {
   color: var(--wait);
   font-weight: 500;
 }
+
+/* ---- clock correlation --------------------------------------------------- */
+
+.download {
+  font-size: var(--step--1);
+  font-weight: 500;
+  color: var(--series);
+}
+
+.clock-readouts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0.75rem 1.25rem;
+  margin: 0 0 1rem;
+}
+
+.clock-readouts dt {
+  font-size: var(--step--1);
+  color: var(--ink-3);
+}
+
+.clock-readouts dd {
+  margin: 0;
+  font-size: var(--step-1);
+  font-weight: 600;
+}
+
+.clock-readouts dd small {
+  font-size: var(--step--1);
+  font-weight: 400;
+  color: var(--ink-2);
+}
+
+.clock-readouts .clock-utc {
+  font-size: var(--step-0);
+  font-weight: 500;
+}
+
+.clock-charts {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 1rem 1.25rem;
+}
+
+@media (max-width: 900px) {
+  .clock-charts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.chart-plot-tall {
+  height: 12rem;
+}

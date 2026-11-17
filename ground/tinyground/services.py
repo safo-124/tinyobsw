@@ -169,6 +169,9 @@ def summary(tm: Telemetry) -> str:
         elif ev.previous_mode:
             detail = f" (was {ev.previous_mode})"
         return f"{ev.severity} severity: {ev.name}{detail}"
+    if (tm.service, tm.subtype) == (9, 2) and len(tm.data) == 7:
+        coarse, fine = struct.unpack(">IH", tm.data[1:7])
+        return f"time report: on-board time {coarse + fine / 65536:.4f} s (every {1 << tm.data[0]} s)"
     if (tm.service, tm.subtype) == (12, 12):
         tr = decode_transition(tm)
         return (f"temperature {tr.previous} -> {tr.current} at {tr.value_c:.2f} C "

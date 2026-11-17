@@ -32,6 +32,29 @@ export interface Hk {
   heater_fault: boolean
   warning_limit_c: number
   danger_limit_c: number
+  utc?: string
+  utc_sigma_ms?: number
+}
+
+export interface Clock {
+  drift_ppm: number
+  drift_sigma_ppm: number
+  base_ppm: number
+  tempco_ppm_per_c: number
+  tempco_sigma: number
+  model_drift_ppm: number | null
+  obt_zero_utc: string
+  offset_sigma_ms: number
+  samples: number
+  rejected: number
+}
+
+export interface TimeReport {
+  obt: number
+  accepted: boolean
+  residual_ms: number
+  note: string
+  clock: Clock | null
 }
 
 export type Severity = 'info' | 'low' | 'medium' | 'high'
@@ -85,6 +108,7 @@ export interface TmEvent {
   hk?: Hk
   event?: EventInfo
   transition?: Transition
+  timecorr?: TimeReport
 }
 
 export type GroundEvent = TcEvent | TmEvent
@@ -98,6 +122,7 @@ export interface Status {
   tc_sent: number
   tm_received: number
   last_hk: Hk | null
+  clock: Clock | null
 }
 
 export type Mode = 'OFF' | 'STANDBY' | 'MEASURE' | 'SAFE'

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { sendFault, sendTc, type Fault, type TcCommand } from './api'
+import { ClockPanel } from './components/ClockPanel'
 import { CommandLadder } from './components/CommandLadder'
 import { CommandPanel } from './components/CommandPanel'
 import { EventsPanel } from './components/EventsPanel'
@@ -30,7 +31,7 @@ const LINK_HELP: Partial<Record<LinkState, string>> = {
 }
 
 export default function App() {
-  const { events, hk, link, apid } = useGroundLink()
+  const { events, hk, link, apid, clock, clockPoints } = useGroundLink()
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -114,6 +115,7 @@ export default function App() {
         <div className="col-center">
           <HkCharts data={hk} events={events} />
           <EventsPanel events={events} />
+          <ClockPanel clock={clock} points={clockPoints} latestHk={latest} />
           <Inspector event={selected} />
         </div>
         <div className="col-right">

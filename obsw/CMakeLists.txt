@@ -37,6 +37,7 @@ add_library(tinyobsw STATIC
   src/services/st03.c
   src/services/st05.c
   src/services/st08.c
+  src/services/st09.c
   src/services/st12.c
   src/services/st17.c
 )
@@ -58,7 +59,7 @@ if(OBSW_TESTS)
     GIT_TAG v2.6.0)
   FetchContent_MakeAvailable(unity)
   enable_testing()
-  foreach(t crc16 ccsds pus services instrument housekeeping monitoring)
+  foreach(t crc16 ccsds pus services instrument housekeeping monitoring time)
     add_executable(test_${t} tests/test_${t}.c)
     target_link_libraries(test_${t} PRIVATE tinyobsw unity)
     add_test(NAME ${t} COMMAND test_${t})

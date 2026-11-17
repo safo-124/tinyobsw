@@ -49,6 +49,9 @@ void setUp(void)
     cfg.time_now = fake_clock;
     cfg.time_ctx = NULL;
     TEST_ASSERT_EQUAL(OBSW_OK, obsw_init(&obsw, &cfg));
+    /* Time reports every 64 s, so these tests see only housekeeping. */
+    obsw.time_rate_exp  = 6;
+    obsw.time_countdown = 64;
     obsw_tick(&obsw); /* starts the scheduler at t = 100 s */
 }
 
