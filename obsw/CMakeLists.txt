@@ -31,9 +31,14 @@ add_library(tinyobsw STATIC
   src/crc16.c
   src/ccsds.c
   src/pus.c
-  # add as you write them: src/ccsds.c src/pus.c src/instrument.c src/services/st01.c ...
+  src/obsw.c
+  src/instrument.c
+  src/services/st01.c
+  src/services/st03.c
+  src/services/st08.c
+  src/services/st17.c
 )
-target_include_directories(tinyobsw PUBLIC include)
+target_include_directories(tinyobsw PUBLIC include PRIVATE src)
 target_compile_options(tinyobsw PRIVATE
   -Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror
   -ffunction-sections -fdata-sections)
@@ -41,6 +46,7 @@ target_compile_options(tinyobsw PRIVATE
 if(NOT CMAKE_CROSSCOMPILING)
   add_executable(obsw_sim sim/main_posix.c)
   target_link_libraries(obsw_sim PRIVATE tinyobsw)
+  target_compile_options(obsw_sim PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 
 if(OBSW_TESTS)
@@ -50,7 +56,7 @@ if(OBSW_TESTS)
     GIT_TAG v2.6.0)
   FetchContent_MakeAvailable(unity)
   enable_testing()
-  foreach(t crc16 ccsds pus)          # add test names here: ccsds pus st01 ...
+  foreach(t crc16 ccsds pus services instrument housekeeping)
     add_executable(test_${t} tests/test_${t}.c)
     target_link_libraries(test_${t} PRIVATE tinyobsw unity)
     add_test(NAME ${t} COMMAND test_${t})

@@ -99,6 +99,7 @@ static void test_build_rejects_bad_arguments(void)
     TEST_ASSERT_EQUAL(OBSW_ERR_NULL, pus_tc_build(1, 0, &s, NULL, 4, buf, sizeof buf, &n));
     TEST_ASSERT_EQUAL(OBSW_ERR_NULL, pus_tc_build(1, 0, &s, NULL, 0, NULL, sizeof buf, &n));
     TEST_ASSERT_EQUAL(OBSW_ERR_NULL, pus_tc_build(1, 0, &s, NULL, 0, buf, sizeof buf, NULL));
+    TEST_ASSERT_EQUAL(OBSW_ERR_NULL, pus_tm_build(1, 0, NULL, NULL, 0, buf, sizeof buf, &n));
 
     TEST_ASSERT_EQUAL(OBSW_ERR_FIELD_RANGE, pus_tc_build(0x800, 0, &s, NULL, 0, buf, sizeof buf, &n));
     TEST_ASSERT_EQUAL(OBSW_ERR_FIELD_RANGE, pus_tc_build(1, 0x4000, &s, NULL, 0, buf, sizeof buf, &n));
@@ -264,6 +265,7 @@ static void test_parse_rejects_truncated_and_null(void)
     TEST_ASSERT_EQUAL(OBSW_ERR_LENGTH_MISMATCH, pus_tc_parse(KNOWN_TC, sizeof KNOWN_TC - 1u, &tc));
     TEST_ASSERT_EQUAL(OBSW_ERR_NULL, pus_tc_parse(NULL, sizeof KNOWN_TC, &tc));
     TEST_ASSERT_EQUAL(OBSW_ERR_NULL, pus_tc_parse(KNOWN_TC, sizeof KNOWN_TC, NULL));
+    TEST_ASSERT_EQUAL(OBSW_ERR_NULL, pus_tm_parse(NULL, sizeof KNOWN_TM, NULL));
 }
 
 static void test_parse_leaves_output_untouched_on_error(void)

@@ -1,0 +1,65 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  obsw-host:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - run: cmake -S obsw -B build -G Ninja -DCMAKE_C_COMPILER=${{ matrix.cc }} -DOBSW_SANITIZE=ON
+      - run: cmake --build build
+      - run: ctest --test-dir build --output-on-failure
+
+  obsw-fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S obsw -B build-fuzz -DCMAKE_C_COMPILER=clang -DOBSW_FUZZ=ON -DOBSW_TESTS=OFF
+      - run: cmake --build build-fuzz --target fuzz_packet
+      - run: ./build-fuzz/fuzz_packet -max_total_time=60 obsw/fuzz/corpus
+
+  obsw-cortex-m33:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi
+      - run: cmake -S obsw -B build-arm -DCMAKE_TOOLCHAIN_FILE=$PWD/obsw/cmake/arm-none-eabi.cmake -DCMAKE_BUILD_TYPE=MinSizeRel
+      - run: cmake --build build-arm
+      - run: arm-none-eabi-size -t build-arm/libtinyobsw.a | tee -a "$GITHUB_STEP_SUMMARY"
+
+  ground:
+    # Python ground segment: codec unit tests plus end-to-end tests
+    # against the real simulator, built with sanitizers.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - run: cmake -S obsw -B build -G Ninja -DOBSW_SANITIZE=ON -DOBSW_TESTS=OFF
+      - run: cmake --build build --target obsw_sim
+      - run: pip install -r ground/requirements.txt
+      - run: pytest -v
+        working-directory: ground
+        env:
+          OBSW_SIM: ${{ github.workspace }}/build/obsw_sim
+
+  console:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: console
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: console/package-lock.json
+      - run: npm ci
+      - run: npm run build
