@@ -29,6 +29,7 @@ endif()
 
 add_library(tinyobsw STATIC
   src/crc16.c
+  src/ccsds.c
   # add as you write them: src/ccsds.c src/pus.c src/instrument.c src/services/st01.c ...
 )
 target_include_directories(tinyobsw PUBLIC include)
@@ -48,7 +49,7 @@ if(OBSW_TESTS)
     GIT_TAG v2.6.0)
   FetchContent_MakeAvailable(unity)
   enable_testing()
-  foreach(t crc16)            # add test names here: ccsds pus st01 ...
+  foreach(t crc16 ccsds)          # add test names here: ccsds pus st01 ...
     add_executable(test_${t} tests/test_${t}.c)
     target_link_libraries(test_${t} PRIVATE tinyobsw unity)
     add_test(NAME ${t} COMMAND test_${t})
