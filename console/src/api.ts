@@ -8,6 +8,11 @@ export type TcCommand =
   | { command: 'hk_enable' }
   | { command: 'hk_disable' }
   | { command: 'hk_interval'; seconds: number }
+  | { command: 'heater_fault' }
+  | { command: 'repair_heater' }
+  | { command: 'monitoring_on' }
+  | { command: 'monitoring_off' }
+  | { command: 'set_limits'; warning_c: number; danger_c: number }
 
 export type Fault = 'bad_crc' | 'truncated' | 'unknown_service' | 'bad_mode_value'
 

@@ -6,6 +6,9 @@
     python -m tinyground.cli hk                      # one housekeeping report now
     python -m tinyground.cli hk-interval 5
     python -m tinyground.cli monitor --seconds 10    # watch live telemetry
+    python -m tinyground.cli heater-fault            # simulate a failure, watch it go SAFE
+    python -m tinyground.cli repair-heater
+    python -m tinyground.cli limits 40 45            # warning / danger, degC
     python -m tinyground.cli send 99 1               # any TC, e.g. an unknown service
 """
 
@@ -79,6 +82,13 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("hk-disable", help="TC[3,6] periodic housekeeping off")
     hi = sub.add_parser("hk-interval", help="TC[3,31] housekeeping period")
     hi.add_argument("seconds", type=int)
+    sub.add_parser("heater-fault", help="TC[8,1] fn 100: simulate a stuck heater")
+    sub.add_parser("repair-heater", help="TC[8,1] fn 101: repair the heater")
+    sub.add_parser("monitoring-on", help="TC[12,1] temperature monitoring on")
+    sub.add_parser("monitoring-off", help="TC[12,2] temperature monitoring off")
+    lim = sub.add_parser("limits", help="TC[12,7] temperature warning and danger limits")
+    lim.add_argument("warning", type=float)
+    lim.add_argument("danger", type=float)
     mon = sub.add_parser("monitor", help="print all telemetry for a while")
     mon.add_argument("--seconds", type=float, default=10.0)
     send = sub.add_parser("send", help="any TC")
@@ -99,6 +109,11 @@ def main(argv: list[str] | None = None) -> int:
         "hk-enable": lambda: commands.hk_enable(a, s, src, ack),
         "hk-disable": lambda: commands.hk_disable(a, s, src, ack),
         "hk-interval": lambda: commands.hk_interval(a, s, args.seconds, src, ack),
+        "heater-fault": lambda: commands.sim_heater_fault(a, s, src, ack),
+        "repair-heater": lambda: commands.sim_clear_fault(a, s, src, ack),
+        "monitoring-on": lambda: commands.monitoring_enable(a, s, src, ack),
+        "monitoring-off": lambda: commands.monitoring_disable(a, s, src, ack),
+        "limits": lambda: commands.monitoring_limits(a, s, args.warning, args.danger, src, ack),
         "send": lambda: Telecommand(a, s, args.service, args.subtype, ack, src,
                                     bytes.fromhex(args.data)),
     }

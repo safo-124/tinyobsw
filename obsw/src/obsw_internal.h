@@ -39,7 +39,7 @@ void st01_report_failure(obsw_t *obsw, uint8_t subtype,
 
 /* ST[3] housekeeping (src/services/st03.c). */
 #define ST03_SID_INSTRUMENT 1u
-#define ST03_HK_LEN         18u /* bytes of data in TM[3,25] for SID 1 */
+#define ST03_HK_LEN         24u /* bytes of data in TM[3,25] for SID 1 */
 obsw_status_t st03_check_sid_list(const obsw_t *obsw, const pus_tc_t *tc);
 obsw_status_t st03_check_intervals(const obsw_t *obsw, const pus_tc_t *tc);
 obsw_status_t st03_enable(obsw_t *obsw, const pus_tc_t *tc);
@@ -52,8 +52,35 @@ void          st03_periodic(obsw_t *obsw);
 /* ST[8] function management (src/services/st08.c). */
 #define ST08_FUNC_SET_MODE       1u /* arg: mode (1 byte) */
 #define ST08_FUNC_RESET_SCIENCE  2u /* no args */
+#define ST08_FUNC_SIM_HEATER_FAULT 100u /* simulation only: heater stuck on */
+#define ST08_FUNC_SIM_CLEAR_FAULT  101u /* simulation only: repair the heater */
 obsw_status_t st08_check(const obsw_t *obsw, const pus_tc_t *tc);
 obsw_status_t st08_perform(obsw_t *obsw, const pus_tc_t *tc);
+
+/* ST[5] event reporting (src/services/st05.c). Subtype = severity. */
+#define ST05_INFO    1u
+#define ST05_LOW     2u
+#define ST05_MEDIUM  3u
+#define ST05_HIGH    4u
+#define ST05_MAX_AUX 8u
+
+#define EV_TEMP_WARNING    1u /* LOW:    above warning limit;   aux temperature i16 */
+#define EV_TEMP_DANGER     2u /* HIGH:   above danger limit;    aux temperature i16 */
+#define EV_TEMP_NOMINAL    3u /* INFO:   back within limits;    aux temperature i16 */
+#define EV_AUTONOMOUS_SAFE 4u /* MEDIUM: put in SAFE on board;  aux previous mode u8 */
+
+void st05_report(obsw_t *obsw, uint8_t severity, uint16_t event_id,
+                 const uint8_t *aux, size_t aux_len);
+
+/* ST[12] on-board monitoring (src/services/st12.c). */
+#define ST12_TRANSITION_LEN 10u
+void          st12_init(obsw_t *obsw);
+void          st12_check(obsw_t *obsw);
+obsw_status_t st12_check_ids(const obsw_t *obsw, const pus_tc_t *tc);
+obsw_status_t st12_check_limits(const obsw_t *obsw, const pus_tc_t *tc);
+obsw_status_t st12_enable(obsw_t *obsw, const pus_tc_t *tc);
+obsw_status_t st12_disable(obsw_t *obsw, const pus_tc_t *tc);
+obsw_status_t st12_set_limits(obsw_t *obsw, const pus_tc_t *tc);
 
 /* ST[17] test service (src/services/st17.c). */
 obsw_status_t st17_are_you_alive(obsw_t *obsw, const pus_tc_t *tc);

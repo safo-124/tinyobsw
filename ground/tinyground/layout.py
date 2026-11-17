@@ -13,7 +13,7 @@ from typing import Dict, List
 from .ccsds import PRIMARY_HDR_LEN
 from .errors import ObswStatus
 from .pus import CRC_LEN, crc16
-from .services import MODE_NAMES
+from .services import EVENT_NAMES, MODE_NAMES, PMON_STATUS_NAMES, SEVERITY_NAMES
 
 Field = Dict[str, object]
 
@@ -82,8 +82,10 @@ def _data_fields(raw: bytes, is_tc: bool, start: int, end: int) -> List[Field]:
                               ObswStatus.describe(_u16(d, 4))))
         return out
 
-    if not is_tc and (service, subtype) == (3, 25) and n == 18:
-        sid, mode, temp, cur, volt, sci, chg, acc, rej = struct.unpack(">BBhHHIHHH", d)
+    if not is_tc and (service, subtype) == (3, 25) and n == 24:
+        (sid, mode, temp, cur, volt, sci, chg, acc, rej,
+         pmon, flags, warn, danger) = struct.unpack(">BBhHHIHHHBBhh", d)
+        flag_text = ", ".join(t for bit, t in ((1, "heater fault"), (2, "monitoring on")) if flags & bit) or "none"
         layout = [
             ("SID", 1, str(sid)),
             ("Mode", 1, MODE_NAMES.get(mode, str(mode))),
@@ -94,6 +96,10 @@ def _data_fields(raw: bytes, is_tc: bool, start: int, end: int) -> List[Field]:
             ("Mode changes", 2, str(chg)),
             ("TCs accepted", 2, str(acc)),
             ("TCs rejected", 2, str(rej)),
+            ("Temperature check", 1, PMON_STATUS_NAMES.get(pmon, str(pmon))),
+            ("Flags", 1, flag_text),
+            ("Warning limit", 2, f"{warn / 100:.2f} °C"),
+            ("Danger limit", 2, f"{danger / 100:.2f} °C"),
         ]
         out, pos = [], start
         for name, size, value in layout:
@@ -101,10 +107,59 @@ def _data_fields(raw: bytes, is_tc: bool, start: int, end: int) -> List[Field]:
             pos += size
         return out
 
+    if not is_tc and service == 5 and n >= 2:
+        ev = _u16(d, 0)
+        out = [_field("Event ID", "data", start, start + 2,
+                      f"{ev} ({EVENT_NAMES.get(ev, 'unknown')}, {SEVERITY_NAMES.get(subtype, '?')} severity)")]
+        if ev in (1, 2, 3) and n == 4:
+            out.append(_field("Temperature", "data", start + 2, end,
+                              f"{struct.unpack('>h', d[2:4])[0] / 100:.2f} °C"))
+        elif ev == 4 and n == 3:
+            out.append(_field("Previous mode", "data", start + 2, end, MODE_NAMES.get(d[2], str(d[2]))))
+        elif n > 2:
+            out.append(_field("Auxiliary data", "data", start + 2, end, f"{n - 2} bytes"))
+        return out
+
+    if not is_tc and (service, subtype) == (12, 12) and n == 10:
+        pmon, param, value, limit, prev, cur = struct.unpack(">HHhhBB", d)
+        layout = [
+            ("Monitoring ID", 2, str(pmon)),
+            ("Parameter ID", 2, f"{param} (temperature)" if param == 1 else str(param)),
+            ("Value", 2, f"{value / 100:.2f} °C"),
+            ("Limit crossed", 2, f"{limit / 100:.2f} °C"),
+            ("Previous status", 1, PMON_STATUS_NAMES.get(prev, str(prev))),
+            ("New status", 1, PMON_STATUS_NAMES.get(cur, str(cur))),
+        ]
+        out, pos = [], start
+        for name, size, value_text in layout:
+            out.append(_field(name, "data", pos, pos + size, value_text))
+            pos += size
+        return out
+
+    if is_tc and service == 12 and subtype in (1, 2, 7) and n >= 3:
+        count = d[0]
+        out = [_field("Number of entries", "data", start, start + 1, str(count))]
+        if subtype == 7 and n == 7:
+            out += [
+                _field("Monitoring ID", "data", start + 1, start + 3, str(_u16(d, 1))),
+                _field("Warning limit", "data", start + 3, start + 5,
+                       f"{struct.unpack('>h', d[3:5])[0] / 100:.2f} °C"),
+                _field("Danger limit", "data", start + 5, end,
+                       f"{struct.unpack('>h', d[5:7])[0] / 100:.2f} °C"),
+            ]
+        elif subtype in (1, 2) and n == 1 + 2 * count:
+            for i in range(count):
+                out.append(_field("Monitoring ID", "data", start + 1 + 2 * i, start + 3 + 2 * i,
+                                  str(_u16(d, 1 + 2 * i))))
+        else:
+            out.append(_field("Entries", "data", start + 1, end, f"{n - 1} bytes"))
+        return out
+
     if is_tc and (service, subtype) == (8, 1) and n >= 2:
         func = _u16(d, 0)
-        out = [_field("Function ID", "data", start, start + 2,
-                      {1: "1 (set mode)", 2: "2 (reset science)"}.get(func, str(func)))]
+        names = {1: "1 (set mode)", 2: "2 (reset science)",
+                 100: "100 (simulate heater fault)", 101: "101 (repair heater)"}
+        out = [_field("Function ID", "data", start, start + 2, names.get(func, str(func)))]
         if func == 1 and n == 3:
             out.append(_field("Mode", "data", start + 2, end, MODE_NAMES.get(d[2], str(d[2]))))
         elif n > 2:

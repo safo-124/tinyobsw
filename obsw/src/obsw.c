@@ -24,6 +24,9 @@ static const tc_route_t ROUTES[] = {
     {  3, 27,  2,   9, st03_check_sid_list,  st03_one_shot      }, /* one-shot HK report */
     {  3, 31,  4,  25, st03_check_intervals, st03_set_intervals }, /* change HK period */
     {  8,  1,  2,  16, st08_check,           st08_perform       }, /* perform a function */
+    { 12,  1,  3,  15, st12_check_ids,       st12_enable        }, /* enable monitoring */
+    { 12,  2,  3,  15, st12_check_ids,       st12_disable       }, /* disable monitoring */
+    { 12,  7,  7,  31, st12_check_limits,    st12_set_limits    }, /* change limits */
     { 17,  1,  0,   0, NULL,                 st17_are_you_alive }, /* are you alive? */
 };
 
@@ -88,6 +91,7 @@ obsw_status_t obsw_init(obsw_t *obsw, const obsw_config_t *cfg)
     obsw->clock_started = 0u;
     instrument_init(&obsw->instr);
     st03_init(obsw);
+    st12_init(obsw);
     return OBSW_OK;
 }
 
@@ -174,6 +178,7 @@ void obsw_tick(obsw_t *obsw)
     while (behind > 0u) {
         obsw->last_tick_s++;
         instrument_step(&obsw->instr);
+        st12_check(obsw);
         st03_periodic(obsw);
         behind--;
     }

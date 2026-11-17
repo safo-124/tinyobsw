@@ -39,6 +39,18 @@
 #define OBSW_MAX_CATCHUP    10u  /* most 1-second steps run by one obsw_tick() */
 #define OBSW_HK_DEFAULT_S   1u   /* default housekeeping period, seconds */
 
+/* ST[12] temperature monitoring defaults */
+#define OBSW_PMON_TEMP_ID      1u    /* the one monitoring definition */
+#define OBSW_PMON_WARN_CDEG    4000  /* 40.00 degC: warning */
+#define OBSW_PMON_DANGER_CDEG  4500  /* 45.00 degC: danger, triggers SAFE */
+#define OBSW_PMON_REPETITIONS  2u    /* samples in a row before a change counts */
+
+typedef enum {
+    PMON_WITHIN_LIMITS  = 0,
+    PMON_ABOVE_WARNING  = 1,
+    PMON_ABOVE_DANGER   = 2
+} pmon_status_t;
+
 typedef void (*obsw_tm_sink_fn)(void *ctx, const uint8_t *pkt, size_t len);
 typedef pus_cuc_time_t (*obsw_time_fn)(void *ctx);
 
@@ -69,6 +81,14 @@ typedef struct {
     uint16_t      hk_interval_s;
     uint16_t      hk_countdown;
 
+    /* ST[12] temperature monitoring */
+    uint8_t       pmon_enabled;
+    uint8_t       pmon_status;     /* confirmed pmon_status_t */
+    uint8_t       pmon_candidate;  /* status being seen, not yet confirmed */
+    uint8_t       pmon_count;      /* consecutive samples showing the candidate */
+    int16_t       pmon_warn_cdeg;
+    int16_t       pmon_danger_cdeg;
+
     uint8_t       tm_buf[OBSW_TM_MAX_LEN];
 } obsw_t;
 
@@ -86,7 +106,8 @@ obsw_status_t obsw_handle_tc(obsw_t *obsw, const uint8_t *buf, size_t len);
 /*
  * Run periodic work. Call it often (e.g. every 100 ms); it reads
  * time_now and runs one step per elapsed whole second: instrument
- * physics, then periodic housekeeping. After a long stall it runs at
+ * physics, then limit monitoring (which may put the instrument in
+ * SAFE), then periodic housekeeping. After a long stall it runs at
  * most OBSW_MAX_CATCHUP steps and skips the rest; if the clock jumps
  * backwards it simply resynchronises. Does nothing without time_now.
  */

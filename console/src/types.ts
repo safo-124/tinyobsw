@@ -27,6 +27,28 @@ export interface Hk {
   mode_changes: number
   tc_accepted: number
   tc_rejected: number
+  pmon_status: 'within limits' | 'above warning' | 'above danger'
+  pmon_enabled: boolean
+  heater_fault: boolean
+  warning_limit_c: number
+  danger_limit_c: number
+}
+
+export type Severity = 'info' | 'low' | 'medium' | 'high'
+
+export interface EventInfo {
+  id: number
+  severity: Severity
+  name: string
+  temperature_c: number | null
+  previous_mode: string | null
+}
+
+export interface Transition {
+  value_c: number
+  limit_c: number
+  from: string
+  to: string
 }
 
 export interface TcEvent {
@@ -61,6 +83,8 @@ export interface TmEvent {
   obt?: number
   verification?: Verification
   hk?: Hk
+  event?: EventInfo
+  transition?: Transition
 }
 
 export type GroundEvent = TcEvent | TmEvent

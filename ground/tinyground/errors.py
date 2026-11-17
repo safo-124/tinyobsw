@@ -25,6 +25,7 @@ class ObswStatus(IntEnum):
     ILLEGAL_TRANSITION = 15
     UNKNOWN_FUNCTION = 16
     UNKNOWN_SID = 17
+    UNKNOWN_PMON = 18
 
     @classmethod
     def describe(cls, code: int) -> str:

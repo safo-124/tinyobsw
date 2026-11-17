@@ -140,7 +140,7 @@ static hk_t hk_at(size_t i)
     pus_tm_t tm = tm_at(i);
     TEST_ASSERT_EQUAL_UINT8(3, tm.sec.service);
     TEST_ASSERT_EQUAL_UINT8(25, tm.sec.subtype);
-    TEST_ASSERT_EQUAL_size_t(18, tm.data_len);
+    TEST_ASSERT_EQUAL_size_t(24, tm.data_len);
     h.sid          = tm.data[0];
     h.mode         = tm.data[1];
     h.temp_cdeg    = (int16_t)be16(&tm.data[2]);

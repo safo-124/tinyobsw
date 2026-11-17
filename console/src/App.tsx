@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { sendFault, sendTc, type Fault, type TcCommand } from './api'
 import { CommandLadder } from './components/CommandLadder'
 import { CommandPanel } from './components/CommandPanel'
+import { EventsPanel } from './components/EventsPanel'
 import { HkCharts } from './components/HkCharts'
 import { Inspector } from './components/Inspector'
 import { PacketLog } from './components/PacketLog'
@@ -14,6 +15,12 @@ const LINK_TEXT: Record<LinkState, string> = {
   never: 'Waiting for instrument',
   live: 'Telemetry live',
   silent: 'Telemetry stopped',
+}
+
+const CHECK: Record<string, { icon: string; text: string; cls: string }> = {
+  'within limits': { icon: '✓', text: 'Within limits', cls: 'ok' },
+  'above warning': { icon: '!', text: 'Above warning', cls: 'warn' },
+  'above danger': { icon: '✕', text: 'Above danger', cls: 'bad' },
 }
 
 const LINK_HELP: Partial<Record<LinkState, string>> = {
@@ -68,6 +75,20 @@ export default function App() {
             <dd>{mode ? mode.charAt(0) + mode.slice(1).toLowerCase() : '–'}</dd>
           </div>
           <div>
+            <dt>Temperature</dt>
+            <dd>
+              {latest ? (
+                <span className={`check check-${latest.pmon_enabled ? CHECK[latest.pmon_status].cls : 'off'}`}>
+                  {latest.temperature_c.toFixed(1)} °C{' '}
+                  <span aria-hidden="true">{latest.pmon_enabled ? CHECK[latest.pmon_status].icon : '–'}</span>{' '}
+                  <small>{latest.pmon_enabled ? CHECK[latest.pmon_status].text : 'Not monitored'}</small>
+                </span>
+              ) : (
+                '–'
+              )}
+            </dd>
+          </div>
+          <div>
             <dt>Accepted / refused</dt>
             <dd>{latest ? `${latest.tc_accepted} / ${latest.tc_rejected}` : '–'}</dd>
           </div>
@@ -82,10 +103,17 @@ export default function App() {
 
       <main className="layout">
         <div className="col-left">
-          <CommandPanel mode={mode} onCommand={onCommand} onFault={onFault} error={error} />
+          <CommandPanel
+            mode={mode}
+            monitoring={latest ? { heaterFault: latest.heater_fault, enabled: latest.pmon_enabled } : null}
+            onCommand={onCommand}
+            onFault={onFault}
+            error={error}
+          />
         </div>
         <div className="col-center">
-          <HkCharts data={hk} />
+          <HkCharts data={hk} events={events} />
+          <EventsPanel events={events} />
           <Inspector event={selected} />
         </div>
         <div className="col-right">

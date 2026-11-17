@@ -26,7 +26,8 @@ typedef enum {
     OBSW_ERR_BAD_APP_DATA       = 14, /* application data has the wrong length or content */
     OBSW_ERR_ILLEGAL_TRANSITION = 15, /* instrument cannot go to that mode from this one */
     OBSW_ERR_UNKNOWN_FUNCTION   = 16, /* ST[8] function ID not defined */
-    OBSW_ERR_UNKNOWN_SID        = 17  /* ST[3] housekeeping structure ID not defined */
+    OBSW_ERR_UNKNOWN_SID        = 17, /* ST[3] housekeeping structure ID not defined */
+    OBSW_ERR_UNKNOWN_PMON       = 18  /* ST[12] parameter monitoring definition ID not defined */
 } obsw_status_t;
 
 #endif

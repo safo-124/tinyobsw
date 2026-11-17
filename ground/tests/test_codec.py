@@ -126,7 +126,8 @@ def test_housekeeping_decoding():
     from tinyground.services import InstrumentHk
 
     data = bytes([1, 2]) + (-150).to_bytes(2, "big", signed=True) + bytes(
-        [0x01, 0xC2, 0x6D, 0x60, 0x00, 0x00, 0x0B, 0xB8, 0x00, 0x03, 0x00, 0x07, 0x00, 0x01])
+        [0x01, 0xC2, 0x6D, 0x60, 0x00, 0x00, 0x0B, 0xB8, 0x00, 0x03, 0x00, 0x07, 0x00, 0x01,
+         1, 0x03, 0x0F, 0xA0, 0x11, 0x94])
     hk = InstrumentHk.decode(Telemetry(100, 0, 3, 25, data=data))
     assert hk.mode_name == "MEASURE"
     assert hk.temperature_c == -1.5          # signed: below zero survives the trip
@@ -134,3 +135,33 @@ def test_housekeeping_decoding():
     assert hk.voltage_v == 28.0
     assert hk.science_count == 3000
     assert (hk.mode_changes, hk.tc_accepted, hk.tc_rejected) == (3, 7, 1)
+    assert hk.pmon_status_name == "above warning"
+    assert hk.heater_fault and hk.pmon_enabled
+    assert (hk.warning_limit_c, hk.danger_limit_c) == (40.0, 45.0)
+
+
+def test_event_and_transition_decoding():
+    from tinyground.services import decode_event, decode_transition, summary
+
+    danger = Telemetry(100, 0, 5, 4, data=bytes([0, 2, 0x11, 0xF8]))   # 46.00 C
+    ev = decode_event(danger)
+    assert (ev.event_id, ev.severity, ev.temperature_c) == (2, "high", 46.0)
+    assert ev.name == "Temperature above danger limit"
+
+    safe = Telemetry(100, 0, 5, 3, data=bytes([0, 4, 2]))
+    assert decode_event(safe).previous_mode == "MEASURE"
+    assert "was MEASURE" in summary(safe)
+
+    tr = decode_transition(Telemetry(100, 0, 12, 12,
+                                     data=bytes([0, 1, 0, 1, 0x11, 0xF8, 0x11, 0x94, 1, 2])))
+    assert (tr.value_c, tr.limit_c, tr.previous, tr.current) == (46.0, 45.0, "above warning", "above danger")
+
+
+def test_monitoring_command_builders():
+    from tinyground import commands
+
+    assert commands.sim_heater_fault(100, 0).data == bytes([0, 100])
+    assert commands.sim_clear_fault(100, 0).data == bytes([0, 101])
+    assert commands.monitoring_disable(100, 0).data == bytes([1, 0, 1])
+    assert commands.monitoring_limits(100, 0, 30, 35).data == bytes([1, 0, 1, 0x0B, 0xB8, 0x0D, 0xAC])
+    assert commands.monitoring_limits(100, 0, -5.5, 10).data[3:5] == (-550).to_bytes(2, "big", signed=True)

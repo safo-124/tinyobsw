@@ -6,6 +6,7 @@ static const int16_t  TARGET_TEMP_CDEG[INSTR_MODE_COUNT] = { 2000, 2500, 3800, 2
 static const uint16_t CURRENT_MA[INSTR_MODE_COUNT]       = {    0,  120,  450,   35 };
 
 #define BUS_VOLTAGE_MV   28000u
+#define HEATER_FAULT_CDEG 2200   /* extra heat while the stuck heater is powered */
 #define SCIENCE_RATE     1000u  /* events per second while measuring */
 
 /* ALLOWED[from][to] */
@@ -36,6 +37,7 @@ void instrument_init(instrument_t *instr)
     instr->temp_cdeg     = TARGET_TEMP_CDEG[INSTR_OFF];
     instr->science_count = 0u;
     instr->mode_changes  = 0u;
+    instr->heater_fault  = 0u;
     instr->noise_state   = 0x5EED5EEDu;
 }
 
@@ -64,12 +66,28 @@ void instrument_reset_science(instrument_t *instr)
     instr->science_count = 0u;
 }
 
+void instrument_set_heater_fault(instrument_t *instr, int on)
+{
+    instr->heater_fault = on ? 1u : 0u;
+}
+
+static int heater_powered(const instrument_t *instr)
+{
+    return instr->mode == INSTR_STANDBY || instr->mode == INSTR_MEASURE;
+}
+
 void instrument_step(instrument_t *instr)
 {
     /* First-order thermal response: close 1/8 of the gap each second,
      * rounding away from zero so it reaches the target exactly. */
-    int gap  = (int)TARGET_TEMP_CDEG[instr->mode] - (int)instr->temp_cdeg;
-    int move = gap > 0 ? (gap + 7) / 8 : (gap - 7) / 8;
+    int target = (int)TARGET_TEMP_CDEG[instr->mode];
+    int gap;
+    int move;
+    if (instr->heater_fault && heater_powered(instr)) {
+        target += HEATER_FAULT_CDEG;
+    }
+    gap  = target - (int)instr->temp_cdeg;
+    move = gap > 0 ? (gap + 7) / 8 : (gap - 7) / 8;
     instr->temp_cdeg = (int16_t)(instr->temp_cdeg + move);
 
     if (instr->mode == INSTR_MEASURE) {

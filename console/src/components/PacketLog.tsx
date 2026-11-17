@@ -20,7 +20,11 @@ function text(e: GroundEvent): string {
 }
 
 function failed(e: GroundEvent): boolean {
-  return e.kind === 'tm' && (!e.valid || e.verification?.ok === false)
+  return e.kind === 'tm' && (!e.valid || e.verification?.ok === false || e.event?.severity === 'high')
+}
+
+function warning(e: GroundEvent): boolean {
+  return e.kind === 'tm' && (e.event?.severity === 'medium' || e.event?.severity === 'low')
 }
 
 export function PacketLog({ events, selectedId, onSelect }: Props) {
@@ -54,7 +58,7 @@ export function PacketLog({ events, selectedId, onSelect }: Props) {
           {visible.map((e) => (
             <li key={e.id}>
               <button
-                className={`log-row log-${e.kind}${failed(e) ? ' is-failed' : ''}${
+                className={`log-row log-${e.kind}${failed(e) ? ' is-failed' : ''}${warning(e) ? ' is-warning' : ''}${
                   e.id === selectedId ? ' is-selected' : ''
                 }`}
                 onClick={() => onSelect(e.id)}
@@ -65,6 +69,7 @@ export function PacketLog({ events, selectedId, onSelect }: Props) {
                 <span className="log-type">{e.type}</span>
                 <span className="log-text">
                   {failed(e) && <span aria-hidden="true">✕ </span>}
+                  {warning(e) && <span aria-hidden="true">! </span>}
                   {text(e)}
                 </span>
                 <span className="log-time">{when(e)}</span>

@@ -3,11 +3,14 @@
  *
  * One housekeeping structure, SID 1, describes the instrument. It is
  * sent as TM[3,25] every hk_interval_s seconds while enabled, and on
- * request. Report data (18 bytes, big-endian):
+ * request. Report data (24 bytes, big-endian):
  *
  *   SID u8 | mode u8 | temperature i16 (0.01 degC) | current u16 (mA)
  *   | bus voltage u16 (mV) | science count u32 | mode changes u16
  *   | TCs accepted u16 | TCs rejected u16
+ *   | monitoring status u8 (0 within, 1 above warning, 2 above danger)
+ *   | flags u8 (bit 0 heater fault, bit 1 monitoring enabled)
+ *   | warning limit i16 | danger limit i16 (0.01 degC)
  *
  * Telecommands (application data formats):
  *   TC[3,5]  enable periodic reports    N u8, then N SIDs (u8)
@@ -37,6 +40,10 @@ static obsw_status_t emit_report(obsw_t *obsw, uint16_t dest_id)
     put_be16(&d[12], s.mode_changes);
     put_be16(&d[14], obsw->tc_accepted);
     put_be16(&d[16], obsw->tc_rejected);
+    d[18] = obsw->pmon_status;
+    d[19] = (uint8_t)((obsw->instr.heater_fault ? 0x01u : 0u) | (obsw->pmon_enabled ? 0x02u : 0u));
+    put_be16(&d[20], (uint16_t)obsw->pmon_warn_cdeg);
+    put_be16(&d[22], (uint16_t)obsw->pmon_danger_cdeg);
     return obsw_emit_tm(obsw, ST03_SERVICE, ST03_HK_REPORT, dest_id, d, sizeof d);
 }
 

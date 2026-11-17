@@ -4,8 +4,12 @@
  * TC[8,1] "perform a function". Application data:
  *   function ID u16, then that function's arguments.
  *
- *   ID 1  SET_MODE       mode u8 (0 OFF, 1 STANDBY, 2 MEASURE, 3 SAFE)
- *   ID 2  RESET_SCIENCE  (no arguments)
+ *   ID 1    SET_MODE          mode u8 (0 OFF, 1 STANDBY, 2 MEASURE, 3 SAFE)
+ *   ID 2    RESET_SCIENCE     (no arguments)
+ *   ID 100  SIM_HEATER_FAULT  (no arguments) simulation only: heater stuck on
+ *   ID 101  SIM_CLEAR_FAULT   (no arguments) simulation only: repair it
+ *
+ * IDs from 100 up exist only in this simulator, to rehearse failures.
  *
  * Acceptance checks the ID, the argument length and that a requested
  * mode exists. Whether the transition is allowed depends on the mode
@@ -28,6 +32,8 @@ obsw_status_t st08_check(const obsw_t *obsw, const pus_tc_t *tc)
         }
         return OBSW_OK;
     case ST08_FUNC_RESET_SCIENCE:
+    case ST08_FUNC_SIM_HEATER_FAULT:
+    case ST08_FUNC_SIM_CLEAR_FAULT:
         return n_args == 0u ? OBSW_OK : OBSW_ERR_BAD_APP_DATA;
     default:
         return OBSW_ERR_UNKNOWN_FUNCTION;
@@ -41,6 +47,12 @@ obsw_status_t st08_perform(obsw_t *obsw, const pus_tc_t *tc)
         return instrument_set_mode(&obsw->instr, (instr_mode_t)tc->data[2]);
     case ST08_FUNC_RESET_SCIENCE:
         instrument_reset_science(&obsw->instr);
+        return OBSW_OK;
+    case ST08_FUNC_SIM_HEATER_FAULT:
+        instrument_set_heater_fault(&obsw->instr, 1);
+        return OBSW_OK;
+    case ST08_FUNC_SIM_CLEAR_FAULT:
+        instrument_set_heater_fault(&obsw->instr, 0);
         return OBSW_OK;
     default:
         return OBSW_ERR_UNKNOWN_FUNCTION; /* unreachable: st08_check ran first */

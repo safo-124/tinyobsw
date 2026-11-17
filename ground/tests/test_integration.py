@@ -12,7 +12,7 @@ from tinyground.commands import Mode
 from tinyground.errors import ObswStatus
 from tinyground.link import UdpLink
 from tinyground.pus import ACK_ALL, Telecommand, Telemetry
-from tinyground.services import InstrumentHk, decode_verification
+from tinyground.services import InstrumentHk, decode_event, decode_transition, decode_verification
 
 pytestmark = needs_sim
 
@@ -112,3 +112,25 @@ def test_housekeeping_can_be_switched_off(link):
     assert types(exchange(link, commands.hk_disable(APID, 40, GROUND_ID))) == [(1, 1), (1, 3), (1, 7)]
     tms = [Telemetry.decode(p) for p in link.listen(2.5)]
     assert [t for t in tms if is_periodic_hk(t)] == []
+
+
+def test_heater_fault_puts_instrument_in_safe_mode(link):
+    """The fault scenario end to end: inject, watch the on-board reaction, recover."""
+    for seq, tc in enumerate([commands.set_mode(APID, 50, Mode.STANDBY, GROUND_ID, ack=0),
+                              commands.set_mode(APID, 51, Mode.MEASURE, GROUND_ID, ack=0),
+                              commands.sim_heater_fault(APID, 52, GROUND_ID, ack=0)]):
+        link.send(tc.encode())
+    tms = [Telemetry.decode(p) for p in link.listen(14.0)]
+
+    events = [decode_event(t) for t in tms if t.service == 5]
+    transitions = [decode_transition(t) for t in tms if (t.service, t.subtype) == (12, 12)]
+    assert [e.event_id for e in events][:3] == [1, 2, 4]    # warning, danger, put in SAFE
+    assert events[2].previous_mode == "MEASURE"
+    assert [(tr.previous, tr.current) for tr in transitions][:2] == [
+        ("within limits", "above warning"), ("above warning", "above danger")]
+    hks = [InstrumentHk.decode(t) for t in tms if (t.service, t.subtype) == (3, 25)]
+    assert hks[-1].mode_name == "SAFE" and hks[-1].heater_fault
+
+    # repair, recover to STANDBY: accepted and completed
+    assert types(exchange(link, commands.sim_clear_fault(APID, 53, GROUND_ID))) == [(1, 1), (1, 3), (1, 7)]
+    assert types(exchange(link, commands.set_mode(APID, 54, Mode.STANDBY, GROUND_ID))) == [(1, 1), (1, 3), (1, 7)]

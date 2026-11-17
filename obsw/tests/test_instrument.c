@@ -132,6 +132,25 @@ static void test_sensor_noise_stays_in_bounds(void)
     }
 }
 
+static void test_heater_fault_heats_only_while_powered(void)
+{
+    int i;
+    instrument_set_heater_fault(&instr, 1);
+    for (i = 0; i < 80; ++i) instrument_step(&instr);
+    TEST_ASSERT_EQUAL_INT16(2000, instr.temp_cdeg);   /* OFF: heater unpowered */
+
+    goto_mode(INSTR_STANDBY);
+    for (i = 0; i < 80; ++i) instrument_step(&instr);
+    TEST_ASSERT_EQUAL_INT16(4700, instr.temp_cdeg);   /* 25 + 22 degC */
+
+    goto_mode(INSTR_SAFE);
+    for (i = 0; i < 80; ++i) instrument_step(&instr);
+    TEST_ASSERT_EQUAL_INT16(2200, instr.temp_cdeg);   /* SAFE cuts heater power */
+
+    instrument_set_heater_fault(&instr, 0);
+    TEST_ASSERT_EQUAL_UINT8(0, instr.heater_fault);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -142,5 +161,6 @@ int main(void)
     RUN_TEST(test_temperature_settles_exactly_and_monotonically);
     RUN_TEST(test_science_counts_only_while_measuring);
     RUN_TEST(test_sensor_noise_stays_in_bounds);
+    RUN_TEST(test_heater_fault_heats_only_while_powered);
     return UNITY_END();
 }

@@ -3,8 +3,14 @@ import type { Fault, TcCommand } from '../api'
 import { ACK, type Mode } from '../types'
 import { ModeDiagram } from './ModeDiagram'
 
+interface Monitoring {
+  heaterFault: boolean
+  enabled: boolean
+}
+
 interface Props {
   mode: Mode | null
+  monitoring: Monitoring | null
   onCommand: (cmd: TcCommand, ack: number) => void
   onFault: (fault: Fault) => void
   error: string | null
@@ -23,9 +29,11 @@ const FAULTS: { fault: Fault; label: string; hint: string }[] = [
   { fault: 'bad_mode_value', label: 'Mode that does not exist', hint: 'Set mode 9' },
 ]
 
-export function CommandPanel({ mode, onCommand, onFault, error }: Props) {
+export function CommandPanel({ mode, monitoring, onCommand, onFault, error }: Props) {
   const [ack, setAck] = useState(ACK.accept | ACK.start | ACK.complete)
   const [period, setPeriod] = useState(1)
+  const [warning, setWarning] = useState(40)
+  const [danger, setDanger] = useState(45)
 
   const send = (cmd: TcCommand) => onCommand(cmd, ack)
   const toggle = (bit: number) => setAck((a) => a ^ bit)
@@ -84,6 +92,51 @@ export function CommandPanel({ mode, onCommand, onFault, error }: Props) {
             {error}
           </p>
         )}
+      </section>
+
+      <section className="panel" aria-labelledby="sim-title">
+        <h2 id="sim-title">Instrument faults</h2>
+        <p className="hint">
+          A stuck heater overheats the instrument while it is powered. Its own monitoring should switch it to Safe,
+          which cuts the heater.
+        </p>
+        <div className="button-row">
+          <button className="danger-btn" onClick={() => send({ command: 'heater_fault' })}>
+            Simulate heater stuck on
+          </button>
+          <button onClick={() => send({ command: 'repair_heater' })}>Repair heater</button>
+        </div>
+        <p className="state-line">
+          Heater:{' '}
+          <strong>{monitoring === null ? 'unknown' : monitoring.heaterFault ? 'stuck on (fault)' : 'working'}</strong>
+        </p>
+
+        <h3>Temperature monitoring</h3>
+        <div className="button-row">
+          <button onClick={() => send({ command: 'monitoring_on' })}>Monitoring on</button>
+          <button onClick={() => send({ command: 'monitoring_off' })}>Monitoring off</button>
+        </div>
+        <p className="state-line">
+          Monitoring: <strong>{monitoring === null ? 'unknown' : monitoring.enabled ? 'on' : 'off'}</strong>
+        </p>
+        <form
+          className="limits-form"
+          onSubmit={(e) => {
+            e.preventDefault()
+            send({ command: 'set_limits', warning_c: warning, danger_c: danger })
+          }}
+        >
+          <label>
+            Warning
+            <input type="number" step="0.5" value={warning} onChange={(e) => setWarning(Number(e.target.value))} />
+          </label>
+          <label>
+            Danger
+            <input type="number" step="0.5" value={danger} onChange={(e) => setDanger(Number(e.target.value))} />
+          </label>
+          <span>°C</span>
+          <button type="submit">Set limits</button>
+        </form>
       </section>
 
       <section className="panel" aria-labelledby="fault-title">

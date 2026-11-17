@@ -20,6 +20,11 @@
  *
  * All values are integers in engineering units, as on a real
  * instrument: centi-degrees Celsius, milliamps, millivolts.
+ *
+ * Fault simulation: a "heater stuck on" fault adds 22 degC to wherever
+ * the temperature would settle, but only while the heater is powered
+ * (STANDBY and MEASURE). OFF and SAFE cut heater power, so the
+ * instrument cools down again: that is what makes SAFE a recovery.
  */
 
 #include <stdint.h>
@@ -40,6 +45,7 @@ typedef struct {
     int16_t      temp_cdeg;     /* detector temperature, 0.01 degC */
     uint32_t     science_count; /* events counted while measuring */
     uint16_t     mode_changes;
+    uint8_t      heater_fault;  /* simulated failure: heater stuck on */
     uint32_t     noise_state;   /* pseudo-random generator for sensor noise */
 } instrument_t;
 
@@ -64,6 +70,9 @@ obsw_status_t instrument_set_mode(instrument_t *instr, instr_mode_t target);
 
 /* Zero the science counter. */
 void instrument_reset_science(instrument_t *instr);
+
+/* Simulation only: inject (1) or repair (0) the stuck-heater fault. */
+void instrument_set_heater_fault(instrument_t *instr, int on);
 
 /* Advance the physics by one second. */
 void instrument_step(instrument_t *instr);

@@ -70,6 +70,7 @@ static const char *status_name(obsw_status_t st)
     case OBSW_ERR_ILLEGAL_TRANSITION: return "ILLEGAL_TRANSITION";
     case OBSW_ERR_UNKNOWN_FUNCTION:   return "UNKNOWN_FUNCTION";
     case OBSW_ERR_UNKNOWN_SID:        return "UNKNOWN_SID";
+    case OBSW_ERR_UNKNOWN_PMON:       return "UNKNOWN_PMON";
     }
     return "UNKNOWN";
 }

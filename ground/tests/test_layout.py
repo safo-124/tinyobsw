@@ -43,7 +43,8 @@ def test_known_tm_layout():
 
 
 def test_housekeeping_split_into_values():
-    data = bytes([1, 1, 0x09, 0xC4, 0, 120, 0x6D, 0x60, 0, 0, 0, 0, 0, 1, 0, 2, 0, 0])
+    data = bytes([1, 1, 0x09, 0xC4, 0, 120, 0x6D, 0x60, 0, 0, 0, 0, 0, 1, 0, 2, 0, 0,
+                  0, 0x02, 0x0F, 0xA0, 0x11, 0x94])
     raw = Telemetry(100, 5, 3, 25, data=data, time=CucTime(10)).encode()
     fields = segments(raw)
     assert_tiles(raw, fields)
@@ -52,6 +53,31 @@ def test_housekeeping_split_into_values():
     assert values["Temperature"] == "25.00 °C"
     assert values["Current"] == "120 mA"
     assert values["Bus voltage"] == "28.000 V"
+    assert values["Temperature check"] == "within limits"
+    assert values["Flags"] == "monitoring on"
+    assert values["Danger limit"] == "45.00 °C"
+
+
+def test_event_and_transition_layouts():
+    ev = Telemetry(100, 0, 5, 4, data=bytes([0, 2, 0x11, 0xF8])).encode()
+    tr = Telemetry(100, 0, 12, 12, data=bytes([0, 1, 0, 1, 0x11, 0xF8, 0x11, 0x94, 1, 2])).encode()
+    for raw in (ev, tr):
+        assert_tiles(raw, segments(raw))
+    ev_values = {f["name"]: f["value"] for f in segments(ev)}
+    assert ev_values["Event ID"] == "2 (Temperature above danger limit, high severity)"
+    assert ev_values["Temperature"] == "46.00 °C"
+    tr_values = {f["name"]: f["value"] for f in segments(tr)}
+    assert tr_values["New status"] == "above danger"
+    assert tr_values["Limit crossed"] == "45.00 °C"
+
+
+def test_monitoring_tc_layouts():
+    limits = commands.monitoring_limits(100, 0, 30, 35).encode()
+    fault = commands.sim_heater_fault(100, 0).encode()
+    assert_tiles(limits, segments(limits))
+    values = {f["name"]: f["value"] for f in segments(limits)}
+    assert (values["Warning limit"], values["Danger limit"]) == ("30.00 °C", "35.00 °C")
+    assert {f["name"]: f["value"] for f in segments(fault)}["Function ID"] == "100 (simulate heater fault)"
 
 
 def test_verification_failure_shows_reason():

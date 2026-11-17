@@ -34,7 +34,8 @@ from .ccsds import next_seq_count
 from .errors import ObswStatus
 from .layout import segments
 from .pus import ACK_ALL, PusError, Telecommand, Telemetry
-from .services import ST01_NAMES, InstrumentHk, decode_verification, summary
+from .services import (ST01_NAMES, InstrumentHk, decode_event, decode_transition,
+                       decode_verification, summary)
 
 GROUND_ID = 10
 LINK_SILENT_AFTER_S = 3.0
@@ -46,9 +47,13 @@ Event = Dict[str, object]
 
 class TcRequest(BaseModel):
     command: Literal["ping", "set_mode", "reset_science", "hk_one_shot",
-                     "hk_enable", "hk_disable", "hk_interval"]
+                     "hk_enable", "hk_disable", "hk_interval",
+                     "heater_fault", "repair_heater", "monitoring_on", "monitoring_off",
+                     "set_limits"]
     mode: Optional[Literal["OFF", "STANDBY", "MEASURE", "SAFE"]] = None
     seconds: Optional[int] = Field(default=None, ge=1, le=3600)
+    warning_c: Optional[float] = Field(default=None, ge=-50, le=150)
+    danger_c: Optional[float] = Field(default=None, ge=-50, le=150)
     ack: int = Field(default=ACK_ALL, ge=0, le=15)
 
 
@@ -202,8 +207,21 @@ class GroundStation:
                 "mode_changes": hk.mode_changes,
                 "tc_accepted": hk.tc_accepted,
                 "tc_rejected": hk.tc_rejected,
+                "pmon_status": hk.pmon_status_name,
+                "pmon_enabled": hk.pmon_enabled,
+                "heater_fault": hk.heater_fault,
+                "warning_limit_c": hk.warning_limit_c,
+                "danger_limit_c": hk.danger_limit_c,
             }
             self.last_hk = event["hk"]
+        elif tm.service == 5:
+            ev = decode_event(tm)
+            event["event"] = {"id": ev.event_id, "severity": ev.severity, "name": ev.name,
+                              "temperature_c": ev.temperature_c, "previous_mode": ev.previous_mode}
+        elif (tm.service, tm.subtype) == (12, 12):
+            tr = decode_transition(tm)
+            event["transition"] = {"value_c": tr.value_c, "limit_c": tr.limit_c,
+                                   "from": tr.previous, "to": tr.current}
         self._publish(event)
 
     # ---- commands --------------------------------------------------------
@@ -225,6 +243,19 @@ class GroundStation:
             return self.send(commands.hk_enable(a, s, src, ack), "Periodic housekeeping on")
         if req.command == "hk_disable":
             return self.send(commands.hk_disable(a, s, src, ack), "Periodic housekeeping off")
+        if req.command == "heater_fault":
+            return self.send(commands.sim_heater_fault(a, s, src, ack), "Simulate heater stuck on")
+        if req.command == "repair_heater":
+            return self.send(commands.sim_clear_fault(a, s, src, ack), "Repair heater")
+        if req.command == "monitoring_on":
+            return self.send(commands.monitoring_enable(a, s, src, ack), "Temperature monitoring on")
+        if req.command == "monitoring_off":
+            return self.send(commands.monitoring_disable(a, s, src, ack), "Temperature monitoring off")
+        if req.command == "set_limits":
+            if req.warning_c is None or req.danger_c is None:
+                raise HTTPException(422, "set_limits needs warning_c and danger_c")
+            return self.send(commands.monitoring_limits(a, s, req.warning_c, req.danger_c, src, ack),
+                             f"Limits {req.warning_c:g} / {req.danger_c:g} °C")
         if req.seconds is None:
             raise HTTPException(422, "hk_interval needs seconds")
         return self.send(commands.hk_interval(a, s, req.seconds, src, ack),

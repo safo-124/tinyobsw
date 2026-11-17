@@ -95,3 +95,31 @@ def test_websocket_streams_events(sim_port):
                 if "TM[17,2]" in seen:
                     break
             assert {"TC[17,1]", "TM[17,2]"} <= seen
+
+
+@needs_sim
+def test_heater_fault_events_reach_the_console(sim_port):
+    with TestClient(create_app(port=sim_port, apid=APID, serve_console=False)) as client:
+        for body in ({"command": "set_mode", "mode": "STANDBY", "ack": 0},
+                     {"command": "set_mode", "mode": "MEASURE", "ack": 0},
+                     {"command": "heater_fault", "ack": 0}):
+            assert client.post("/api/tc", json=body).status_code == 200
+        events = wait_for(client, lambda ev: any(e.get("event", {}).get("id") == 4 for e in ev),
+                          timeout=15.0)
+        names = [e["event"]["name"] for e in events if "event" in e]
+        assert names[:3] == ["Temperature above warning limit", "Temperature above danger limit",
+                             "Instrument put in SAFE on board"]
+        assert any(e.get("transition", {}).get("to") == "above danger" for e in events)
+        wait_for(client, lambda ev: (client.get("/api/status").json()["last_hk"] or {})
+                 .get("mode") == "SAFE")
+        hk = client.get("/api/status").json()["last_hk"]
+        assert hk["heater_fault"] is True and hk["danger_limit_c"] == 45.0
+
+
+def test_set_limits_validation():
+    with TestClient(create_app(port=1, serve_console=False)) as client:
+        assert client.post("/api/tc", json={"command": "set_limits", "warning_c": 30}).status_code == 422
+        assert client.post("/api/tc", json={"command": "set_limits", "warning_c": 30,
+                                            "danger_c": 999}).status_code == 422
+        ok = client.post("/api/tc", json={"command": "set_limits", "warning_c": 30, "danger_c": 35})
+        assert ok.status_code == 200 and ok.json()["label"] == "Limits 30 / 35 °C"
