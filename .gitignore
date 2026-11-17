@@ -1,0 +1,7 @@
+build*/
+.venv/
+__pycache__/
+*.gcda
+*.gcno
+node_modules/
+console/dist/
